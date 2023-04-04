@@ -1,48 +1,42 @@
-const BigNumber = require('bignumber.js');
-require('dotenv').config()
-const {time} = require("@nomicfoundation/hardhat-network-helpers");
 const {expect} = require("chai");
+const {ethers} = require("hardhat");
 const hre = require("hardhat");
-const minGas = '150000';
-async function timeIncreaseTo(seconds) {
-  await time.increaseTo(seconds);
-}
+let dev, user, none, devAddress, userAddress, noneAddress;
+const util = require('ethereumjs-util')
+describe("main", function () {
+  it("main test", async function () {
+    [dev, user, none] = await ethers.getSigners();
+    devAddress = dev.address,
+        userAddress = user.address,
+        noneAddress = none.address;
 
-function toWei(v) {
-  return ethers.utils.parseUnits(v, 'ether').toString();
-}
+    const [_dev, _user] = await ethers.getSigners();
+    let DEV = _dev.address, USER1 = _user.address;
 
-function fromWei(v) {
-  return ethers.utils.formatUnits(v, 'ether').toString();
-}
+    const _Token = await ethers.getContractFactory("Token");
+    const _main = await ethers.getContractFactory("main");
 
-async function balanceOf(address) {
-  return (await ethers.provider.getBalance(address)).toString();
-}
+    const Token = await _Token.deploy('token','token');
+    await Token.deployed();
 
-async function deploy(chainId, startMintId, maxMintId, mintPrice) {
-  const [DEV, A, B, C] = await ethers.getSigners();
-  const Main = await ethers.getContractFactory("GamePayment");
-  const main = await Main.deploy(
-      minGas,
-      endpoint.address,
-      startMintId,
-      maxMintId,
-      startDate,
-      endDate,
-      tree.root,
-      toWei(mintPrice),
-      '0x0000000000000000000000000000000000000001'
-  );
-  return {DEV, A, B, C, main, TREE, endpoint}
-}
+    const main = await _main.deploy(Token.address);
+    await main.deployed();
 
-describe("GamePayment", function () {
-  describe("Security", function () {
-    it("whitelisted security checks", async function () {
-      this.timeout(640000);
-      const network = await hre.ethers.provider.getNetwork();
-      const {DEV, A, B, C, main, TREE} = await deploy(network.chainId, '1', '2', '0.05');
-    });
+    await Token.mint(main.address,'100');
+
+    const payTo = devAddress;
+    const value = '1';
+    const transaction = '1';
+    const hashParams = await main.hashParams(payTo, value, transaction);
+    const signature = await web3.eth.sign(hashParams, payTo);
+    const { v, r, s } = ethers.utils.splitSignature(signature);
+    await main.withdraw(value, transaction, v, r, s);
+
+    const balanceOfContract = (await Token.balanceOf(main.address)).toString();
+    const balanceOfUser = (await Token.balanceOf(payTo)).toString();
+
+    expect(balanceOfContract).to.be.eq('99')
+    expect(balanceOfUser).to.be.eq('1')
+
   });
 });

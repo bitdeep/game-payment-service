@@ -1,0 +1,12 @@
+{
+  "name": "xex-wl-server",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "ethers": "^6.2.3",
+    "express": "^4.18.2",
+    "uuid": "^9.0.0"
+  }
+}

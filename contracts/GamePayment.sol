@@ -119,10 +119,10 @@ contract GamePayment is Ownable {
     constructor (address _TOKEN, address _admin, address _treasure) {
 
         if( _admin == address(0x0))
-            revert InvalidAdminAddress;
+            revert InvalidAdminAddress();
 
         if( _treasure == address(0x0))
-            revert InvalidTreasureAddress;
+            revert InvalidTreasureAddress();
 
         TOKEN = IERC20(_TOKEN);
         TOKEN.balanceOf(address(this));
