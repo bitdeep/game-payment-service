@@ -5,9 +5,9 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-// import "hardhat/console.sol";
+import "hardhat/console.sol";
 
-contract GamePayment is Ownable {
+contract Main is Ownable {
 
     // payment token instance
     IERC20 public TOKEN;
@@ -31,7 +31,7 @@ contract GamePayment is Ownable {
     bool public useWhitelist = false;
 
     // game version
-    uint private game_version = 1;
+    uint public game_version = 1;
 
     // TOKEN amount whenever play game
     // e.g. 1 TOKEN
@@ -136,85 +136,6 @@ contract GamePayment is Ownable {
         // Player can withdraw one time per 6 hours
         PLAYER_WITHDRAW_RATE = 21600;
 
-    }
-
-    // Deposit TOKEN Token to play the game
-
-    function deposit(uint amount, uint _version) checkVersion(_version)
-        external notBlacklist inWhiteList isNotPaused
-    {
-        if(amount > MAX_DEPOSIT_AMOUNT)
-            revert DepositExceedLimit();
-
-        // first, deposit tokens
-        TOKEN.safeTransferFrom(msg.sender, address(this), amount);
-
-        // we emit the deposit event before any fee deduction as fee may vary
-        emit Deposited(msg.sender, amount, block.timestamp);
-
-        // now, send the fee, if any
-        if( FEE > 0 ){
-            uint fee = (amount * FEE) / 10000;
-            amount = amount - fee; // deduct the fee
-            TOKEN.safeTransferFrom(address(this), treasureAddress, fee);
-        }
-
-        PlayerInfo storage player = players[msg.sender];
-        player.deposited_amount = player.deposited_amount + amount;
-        player.last_deposit_ts = block.timestamp;
-
-    }
-
-    function withdraw(address player_wallet, uint amount, uint _version,
-        uint _tx, uint timestamp, uint8 v, bytes32 r, bytes32 s)
-    external
-    isNotPaused notBlacklist
-    checkVersion(_version)
-    {
-        if(amount > TOKEN.balanceOf(address(this)))
-            revert InsufficientFundsInContract();
-
-        // attention: server app must send a unique tx each withdraw
-        if(transactions[_tx] > 0)
-            revert TxAlreadyProcessed();
-
-        if(player_wallet == address(0x0))
-            revert InvalidPlayerWallet();
-
-        if(amount > MAX_WITHDRAW_AMOUNT)
-            revert WithdrawAmountTooHigh();
-
-        if( amount < MIN_WITHDRAW_AMOUNT)
-            revert WithdrawAmountTooLow();
-
-        if(isWithdrawTimestampExpired(timestamp))
-            revert WithdrawExpired();
-
-        // check if we have the signerAddress signature
-        bytes32 _hashOfAuthorization = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32",
-            appHashParams(player_wallet, amount, _tx, timestamp)
-            ));
-
-        if(ECDSA.recover(_hashOfAuthorization, v, r, s) != signerAddress)
-            revert InvalidWithdrawSignature();
-        // prevent double withdraw, server must send a unique tx to every withdraw
-
-        // mark this tx as spent
-        transactions[_tx] = block.timestamp;
-
-        // msg.sender is game wallet
-        PlayerInfo memory playerInfo = players[player_wallet];
-
-        if(block.timestamp - playerInfo.last_withdraw_ts < PLAYER_WITHDRAW_RATE)
-            revert WithdrawTooFrequent();
-
-        PlayerInfo storage player = players[player_wallet];
-        player.last_withdraw_ts = block.timestamp;
-
-        // transfer TOKEN from contract to game player
-        TOKEN.safeTransfer(player_wallet, amount);
-
-        emit Withdraw(player_wallet, amount, block.timestamp);
     }
 
     function appHashParams(address payTo, uint amount, uint _tx, uint timestamp) public pure returns (bytes32) {
@@ -372,4 +293,85 @@ contract GamePayment is Ownable {
     }
 
 
+
+    // Deposit TOKEN Token to play the game
+
+    function deposit(uint amount, uint _version) checkVersion(_version)
+    external notBlacklist inWhiteList isNotPaused
+    {
+        if(amount > MAX_DEPOSIT_AMOUNT)
+            revert DepositExceedLimit();
+
+        // first, deposit tokens
+        TOKEN.safeTransferFrom(msg.sender, address(this), amount);
+
+        // we emit the deposit event before any fee deduction as fee may vary
+        emit Deposited(msg.sender, amount, block.timestamp);
+
+        // now, send the fee, if any
+        if( FEE > 0 ){
+            uint fee = (amount * FEE) / 10000;
+            amount = amount - fee; // deduct the fee
+            TOKEN.safeTransfer(treasureAddress, fee);
+        }
+
+        PlayerInfo storage player = players[msg.sender];
+        player.deposited_amount = player.deposited_amount + amount;
+        player.last_deposit_ts = block.timestamp;
+
+    }
+
+    function withdraw(address player_wallet, uint amount, uint _version,
+        uint _tx, uint timestamp, uint8 v, bytes32 r, bytes32 s)
+    external
+    isNotPaused notBlacklist
+    checkVersion(_version)
+    {
+
+        if(amount > TOKEN.balanceOf(address(this)))
+            revert InsufficientFundsInContract();
+
+        // attention: server app must send a unique tx each withdraw
+        if(transactions[_tx] > 0)
+            revert TxAlreadyProcessed();
+
+        if(player_wallet == address(0x0))
+            revert InvalidPlayerWallet();
+
+        if(amount > MAX_WITHDRAW_AMOUNT)
+            revert WithdrawAmountTooHigh();
+
+        if( amount < MIN_WITHDRAW_AMOUNT)
+            revert WithdrawAmountTooLow();
+
+        if(isWithdrawTimestampExpired(timestamp))
+            revert WithdrawExpired();
+
+        // check if we have the signerAddress signature
+        bytes32 _hashOfAuthorization = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32",
+            appHashParams(player_wallet, amount, _tx, timestamp)
+            ));
+
+        if(ECDSA.recover(_hashOfAuthorization, v, r, s) != signerAddress)
+            revert InvalidWithdrawSignature();
+        // prevent double withdraw, server must send a unique tx to every withdraw
+
+        // mark this tx as spent
+        transactions[_tx] = block.timestamp;
+
+        // msg.sender is game wallet
+        PlayerInfo memory playerInfo = players[player_wallet];
+
+        if(block.timestamp - playerInfo.last_withdraw_ts < PLAYER_WITHDRAW_RATE)
+            revert WithdrawTooFrequent();
+
+        PlayerInfo storage player = players[player_wallet];
+        player.last_withdraw_ts = block.timestamp;
+
+        // transfer TOKEN from contract to game player
+        TOKEN.safeTransfer(player_wallet, amount);
+
+        emit Withdraw(player_wallet, amount, block.timestamp);
+
+    }
 }
