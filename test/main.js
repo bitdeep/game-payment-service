@@ -4,13 +4,14 @@ const hre = require("hardhat");
 let dev, user, none, devAddress, userAddress, treasureAddress, wallet;
 const util = require('ethereumjs-util')
 const {getCurrentTimestamp} = require("hardhat/internal/hardhat-network/provider/utils/getCurrentTimestamp");
-
+const Web3 = require('web3');
 async function timestamp() {
     return (await hre.ethers.provider.getBlock("latest")).timestamp;
 }
 
 describe("main", function () {
     it("direct contract test", async function () {
+        const web3 = new Web3('http://localhost:8545');
         [dev, user, treasure] = await ethers.getSigners();
         devAddress = dev.address
         userAddress = user.address
@@ -39,12 +40,13 @@ describe("main", function () {
         await main.deposit(deposit_amount, version);
 
         const playerInfo = await main.players(devAddress);
-        const withdrawAmount = playerInfo.deposited_amount;
+        const withdrawAmount = playerInfo.deposited_amount.toString();
         const ts = await timestamp();
         const hashParams = await main.appHashParams(devAddress, withdrawAmount, transaction, ts);
         const signerAddress = (await main.signerAddress());
         expect(signerAddress).to.be.eq(wallet.address);
-        const signature = await wallet.signMessage(hashParams);
+        // const signature = await wallet.signMessage(hashParams);
+        const signature = await web3.eth.sign(hashParams, devAddress);
         const {v, r, s} = ethers.utils.splitSignature(signature);
 
         await main.withdraw(devAddress, withdrawAmount, version, transaction, ts, v, r, s);
@@ -52,8 +54,8 @@ describe("main", function () {
         const balanceOfContract = (await token.balanceOf(main.address)).toString();
         const balanceOfUser = (await token.balanceOf(devAddress)).toString();
 
-        expect(balanceOfContract).to.be.eq('99')
-        expect(balanceOfUser).to.be.eq('1')
+        expect(balanceOfContract).to.be.eq('0')
+        expect(balanceOfUser).to.be.eq(withdrawAmount)
 
     });
 });

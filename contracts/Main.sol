@@ -12,6 +12,7 @@ contract Main is Ownable {
     // payment token instance
     IERC20 public TOKEN;
     using SafeERC20 for IERC20;
+    using ECDSA for bytes32;
 
     // Player Info
     struct PlayerInfo {
@@ -74,14 +75,14 @@ contract Main is Ownable {
 
     // Check if sender is not in blacklist
     modifier notBlacklist {
-        if(blacklist[msg.sender])
+        if (blacklist[msg.sender])
             revert AddressBlacklisted();
         _;
     }
 
     // Check game version
     modifier checkVersion (uint _version) {
-        if(game_version != _version)
+        if (game_version != _version)
             revert InvalidGameVersion();
         _;
     }
@@ -89,7 +90,7 @@ contract Main is Ownable {
     // Check if sender is in whitelist
     modifier inWhiteList {
         if (useWhitelist == true) {
-            if( ! whitelist[msg.sender])
+            if (!whitelist[msg.sender])
                 revert NotWhitelisted();
         }
         _;
@@ -118,10 +119,10 @@ contract Main is Ownable {
 
     constructor (address _TOKEN, address _admin, address _treasure) {
 
-        if( _admin == address(0x0))
+        if (_admin == address(0x0))
             revert InvalidAdminAddress();
 
-        if( _treasure == address(0x0))
+        if (_treasure == address(0x0))
             revert InvalidTreasureAddress();
 
         TOKEN = IERC20(_TOKEN);
@@ -198,7 +199,7 @@ contract Main is Ownable {
       * update the max withdrawal token amount to player
       * this should be called by only owner
       */
-    function updateMaxWithdrawAmount (uint _amount) external onlyOwner {
+    function updateMaxWithdrawAmount(uint _amount) external onlyOwner {
         require(MAX_WITHDRAW_AMOUNT != _amount, "Update amount: This value has already been set");
         MAX_WITHDRAW_AMOUNT = _amount;
 
@@ -209,7 +210,7 @@ contract Main is Ownable {
       * update the max withdrawal token amount to player
       * this should be called by only owner
       */
-    function updateMaxDepositAmount (uint _amount) external onlyOwner {
+    function updateMaxDepositAmount(uint _amount) external onlyOwner {
         require(MAX_DEPOSIT_AMOUNT != _amount, "Update amount: This value has already been set");
         MAX_DEPOSIT_AMOUNT = _amount;
     }
@@ -218,7 +219,7 @@ contract Main is Ownable {
       * update the min withdrawal token amount to player
       * this should be called by only owner
       */
-    function updateMinWithdrawAmount (uint _amount) external onlyOwner {
+    function updateMinWithdrawAmount(uint _amount) external onlyOwner {
         require(MIN_WITHDRAW_AMOUNT != _amount, "Update amount: This value has already been set");
         MIN_WITHDRAW_AMOUNT = _amount;
     }
@@ -228,7 +229,7 @@ contract Main is Ownable {
       * update the max withdrawable count to a player
       * this should be called by only owner
       */
-    function updatePlayerWithdrawRate (uint _rate) external onlyOwner {
+    function updatePlayerWithdrawRate(uint _rate) external onlyOwner {
         require(PLAYER_WITHDRAW_RATE != _rate, "Update rate: This value has already been set");
         PLAYER_WITHDRAW_RATE = _rate;
     }
@@ -238,16 +239,16 @@ contract Main is Ownable {
       * update admin(game) wallet address.
       * this sould be called by only owner
       */
-    function updateAdminWallet (address new_wallet) external onlyOwner {
+    function updateAdminWallet(address new_wallet) external onlyOwner {
         require(signerAddress != new_wallet, "Update: This wallet address has already been set");
-        require( new_wallet != address(0), "invalid signerAddress");
+        require(new_wallet != address(0), "invalid signerAddress");
         signerAddress = new_wallet;
 
         emit UpdatedAdmin(signerAddress, block.timestamp);
     }
 
     // update game version by only owner
-    function updateGameVersion (uint _version) external onlyOwner {
+    function updateGameVersion(uint _version) external onlyOwner {
         require(game_version != _version, "Same game version");
         game_version = _version;
     }
@@ -256,13 +257,13 @@ contract Main is Ownable {
       * make game as pause or not
       * this should be able to call with only owner
       */
-    function setGamePaused(bool _paused) onlyOwner external{
+    function setGamePaused(bool _paused) onlyOwner external {
         require(isGamePaused == _paused, "Update pause: same state with prev");
         isGamePaused = _paused;
     }
 
     // For test version or unlikly case, we need to use whitelist or not
-    function setWhitelistUsable(bool _state) external onlyOwner{
+    function setWhitelistUsable(bool _state) external onlyOwner {
         require(useWhitelist != _state, "Already set");
         useWhitelist = _state;
     }
@@ -275,14 +276,14 @@ contract Main is Ownable {
 
     // withdraw all BNB from pool
     // In case anyone sent their BNB into pool accidently, we need to send back to him
-    function withdrawBNB (uint _amount) external onlyOwner {
+    function withdrawBNB(uint _amount) external onlyOwner {
         uint balance = address(this).balance;
         require(balance > _amount);
         _withdraw(msg.sender, _amount);
     }
 
     function _withdraw(address _address, uint _amount) private {
-        (bool success, ) = _address.call{value: _amount}("");
+        (bool success,) = _address.call{value: _amount}("");
         require(success, "Transfer failed.");
     }
 
@@ -299,7 +300,7 @@ contract Main is Ownable {
     function deposit(uint amount, uint _version) checkVersion(_version)
     external notBlacklist inWhiteList isNotPaused
     {
-        if(amount > MAX_DEPOSIT_AMOUNT)
+        if (amount > MAX_DEPOSIT_AMOUNT)
             revert DepositExceedLimit();
 
         // first, deposit tokens
@@ -309,9 +310,10 @@ contract Main is Ownable {
         emit Deposited(msg.sender, amount, block.timestamp);
 
         // now, send the fee, if any
-        if( FEE > 0 ){
+        if (FEE > 0) {
             uint fee = (amount * FEE) / 10000;
-            amount = amount - fee; // deduct the fee
+            amount = amount - fee;
+            // deduct the fee
             TOKEN.safeTransfer(treasureAddress, fee);
         }
 
@@ -321,6 +323,21 @@ contract Main is Ownable {
 
     }
 
+    function verifyMessage(string memory message, bytes memory signature) public view returns (address, bool) {
+        //hash the plain text message
+        bytes32 messagehash = keccak256(bytes(message));
+
+        address signeraddress = messagehash.toEthSignedMessageHash().recover(signature);
+
+        if (msg.sender == signeraddress) {
+            //The message is authentic
+            return (signeraddress, true);
+        } else {
+            //msg.sender didnt sign this message.
+            return (signeraddress, false);
+        }
+    }
+
     function withdraw(address player_wallet, uint amount, uint _version,
         uint _tx, uint timestamp, uint8 v, bytes32 r, bytes32 s)
     external
@@ -328,31 +345,29 @@ contract Main is Ownable {
     checkVersion(_version)
     {
 
-        if(amount > TOKEN.balanceOf(address(this)))
+        if (amount > TOKEN.balanceOf(address(this)))
             revert InsufficientFundsInContract();
 
         // attention: server app must send a unique tx each withdraw
-        if(transactions[_tx] > 0)
+        if (transactions[_tx] > 0)
             revert TxAlreadyProcessed();
 
-        if(player_wallet == address(0x0))
+        if (player_wallet == address(0x0))
             revert InvalidPlayerWallet();
 
-        if(amount > MAX_WITHDRAW_AMOUNT)
+        if (amount > MAX_WITHDRAW_AMOUNT)
             revert WithdrawAmountTooHigh();
 
-        if( amount < MIN_WITHDRAW_AMOUNT)
+        if (amount < MIN_WITHDRAW_AMOUNT)
             revert WithdrawAmountTooLow();
 
-        if(isWithdrawTimestampExpired(timestamp))
+        if (isWithdrawTimestampExpired(timestamp))
             revert WithdrawExpired();
 
         // check if we have the signerAddress signature
-        bytes32 _hashOfAuthorization = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32",
-            appHashParams(player_wallet, amount, _tx, timestamp)
-            ));
-
-        if(ECDSA.recover(_hashOfAuthorization, v, r, s) != signerAddress)
+        bytes32 _hashOfAuthorization = ECDSA.toEthSignedMessageHash(appHashParams(player_wallet, amount, _tx, timestamp));
+        address addrProof = ECDSA.recover(_hashOfAuthorization, v, r, s);
+        if (addrProof != signerAddress)
             revert InvalidWithdrawSignature();
         // prevent double withdraw, server must send a unique tx to every withdraw
 
@@ -362,7 +377,7 @@ contract Main is Ownable {
         // msg.sender is game wallet
         PlayerInfo memory playerInfo = players[player_wallet];
 
-        if(block.timestamp - playerInfo.last_withdraw_ts < PLAYER_WITHDRAW_RATE)
+        if (block.timestamp - playerInfo.last_withdraw_ts < PLAYER_WITHDRAW_RATE)
             revert WithdrawTooFrequent();
 
         PlayerInfo storage player = players[player_wallet];
