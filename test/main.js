@@ -45,8 +45,7 @@ describe("main", function () {
         const hashParams = await main.appHashParams(devAddress, withdrawAmount, transaction, ts);
         const signerAddress = (await main.signerAddress());
         expect(signerAddress).to.be.eq(wallet.address);
-        // const signature = await wallet.signMessage(hashParams);
-        const signature = await web3.eth.sign(hashParams, devAddress);
+        const signature = await wallet.signMessage( ethers.utils.arrayify(hashParams) );
         const {v, r, s} = ethers.utils.splitSignature(signature);
 
         await main.withdraw(devAddress, withdrawAmount, version, transaction, ts, v, r, s);
